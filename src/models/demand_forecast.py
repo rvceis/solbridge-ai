@@ -2,8 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
-from tensorflow import keras
 from typing import Tuple, Dict, Any, Optional
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
@@ -12,6 +10,16 @@ from src.utils.logger import get_logger
 from src.utils.exceptions import ModelLoadError, PredictionError
 
 logger = get_logger(__name__)
+
+# Lazy import TensorFlow to avoid startup failure if not installed
+def _import_tensorflow():
+    try:
+        import tensorflow as tf
+        from tensorflow import keras
+        return tf, keras
+    except ImportError:
+        logger.warning("TensorFlow not installed - LSTM models will not be available")
+        return None, None
 
 
 class DemandLSTMModel:
@@ -33,11 +41,15 @@ class DemandLSTMModel:
         
         logger.info(f"Initializing DemandLSTMModel: input_size={input_size}")
     
-    def build_model(self, lookback_hours: int = 168) -> keras.Model:
+    def build_model(self, lookback_hours: int = 168):
         """Build architecture"""
         logger.info(f"Building demand LSTM with lookback={lookback_hours}")
         
         try:
+            tf, keras = _import_tensorflow()
+            if keras is None:
+                raise ModelLoadError("DemandLSTMModel", "TensorFlow not installed")
+            
             model = keras.Sequential([
                 keras.layers.Input(shape=(lookback_hours, self.input_size)),
                 

@@ -2,9 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
 from typing import Tuple, Dict, Any, Optional, List
 import joblib
 from datetime import datetime, timedelta
@@ -13,6 +10,17 @@ from src.utils.logger import get_logger
 from src.utils.exceptions import ModelLoadError, PredictionError, DataProcessingError
 
 logger = get_logger(__name__)
+
+# Lazy import TensorFlow to avoid startup failure if not installed
+def _import_tensorflow():
+    try:
+        import tensorflow as tf
+        from tensorflow import keras
+        from tensorflow.keras import layers
+        return tf, keras, layers
+    except ImportError:
+        logger.warning("TensorFlow not installed - LSTM models will not be available")
+        return None, None, None
 
 
 class SolarLSTMModel:
@@ -43,7 +51,7 @@ class SolarLSTMModel:
         
         logger.info(f"Initializing SolarLSTMModel: input_size={input_size}, lstm_units={lstm_units}")
     
-    def build_model(self, lookback_hours: int = 168) -> keras.Model:
+    def build_model(self, lookback_hours: int = 168):
         """
         Build LSTM architecture
         
@@ -56,6 +64,10 @@ class SolarLSTMModel:
         logger.info(f"Building LSTM model with lookback={lookback_hours}")
         
         try:
+            tf, keras, layers = _import_tensorflow()
+            if keras is None:
+                raise ModelLoadError("SolarLSTMModel", "TensorFlow not installed")
+            
             model = keras.Sequential([
                 # Input layer
                 layers.Input(shape=(lookback_hours, self.input_size)),
