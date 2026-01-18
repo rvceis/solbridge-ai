@@ -2,14 +2,13 @@ services:
   # ML Service
   - type: web
     name: solar-ml-service
-    runtime: python3
-    pythonVersion: 3.11
     env: python
+    pythonVersion: 3.11
     region: oregon
     plan: free
     branch: main
     rootDir: ml-service
-    buildCommand: pip install --no-cache-dir -r requirements-render.txt
+    buildCommand: pip install --no-cache-dir --prefer-binary -r requirements-render.txt
     startCommand: python3 run.py
     envVars:
       - key: ENVIRONMENT
@@ -22,4 +21,6 @@ services:
         value: 8001
       - key: PYTHONUNBUFFERED
         value: 1
+      - key: PIP_ONLY_BINARY
+        value: ":all:"
     healthCheckPath: /health
