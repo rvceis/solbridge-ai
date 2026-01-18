@@ -12,7 +12,7 @@ services:
       - ML_HOST=0.0.0.0
       - ML_PORT=8001
       - REDIS_HOST=redis
-      - DATABASE_URL=postgresql://solar_user:solar_password@postgres:5432/solar_sharing
+      - DATABASE_URL=postgresql://solar_user:solar_password@postgres:5435/solar_sharing
       - LOG_LEVEL=INFO
     volumes:
       - ./logs:/app/logs
@@ -42,7 +42,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5435:5432"
     restart: unless-stopped
     networks:
       - solar-network
@@ -55,9 +55,9 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: solar-redis
+    container_name: solar-ml-redis
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -86,38 +86,38 @@ services:
     networks:
       - solar-network
 
-  # Prometheus (Metrics Collection)
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: solar-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    restart: unless-stopped
-    networks:
-      - solar-network
+  # Prometheus (Metrics Collection) - COMMENTED OUT
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: solar-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #   restart: unless-stopped
+  #   networks:
+  #     - solar-network
 
-  # Grafana (Visualization)
-  grafana:
-    image: grafana/grafana:latest
-    container_name: solar-grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=redis-datasource
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-    networks:
-      - solar-network
+  # Grafana (Visualization) - COMMENTED OUT
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: solar-grafana
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_INSTALL_PLUGINS=redis-datasource
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   depends_on:
+  #     - prometheus
+  #   restart: unless-stopped
+  #   networks:
+  #     - solar-network
 
 networks:
   solar-network:
@@ -127,5 +127,5 @@ volumes:
   postgres_data:
   redis_data:
   mlflow_artifacts:
-  prometheus_data:
-  grafana_data:
+  # prometheus_data:
+  # grafana_data:

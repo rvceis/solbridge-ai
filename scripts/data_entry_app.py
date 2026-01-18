@@ -49,6 +49,30 @@ def detect_csv_delimiter(file_path: Path, sample_lines: int = 5) -> str:
     return ','  # default to comma
 
 
+def detect_nsrdb_header_row(file_path: Path, max_scan_lines: int = 25) -> int | None:
+    """Detect NSRDB-style files and return index of the real header row.
+
+    NSRDB files typically start with two metadata rows, followed by the
+    actual header line that begins with:
+      "Year,Month,Day,Hour,Minute,..."
+
+    Returns 0-based line index of the header when found, otherwise None.
+    """
+    encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+    for enc in encodings:
+        try:
+            with open(file_path, 'r', encoding=enc, errors='ignore') as f:
+                for idx, line in enumerate(f):
+                    if idx > max_scan_lines:
+                        break
+                    normalized = line.strip().lower().replace(' ', '')
+                    if 'year,month,day,hour,minute' in normalized:
+                        return idx
+        except Exception:
+            continue
+    return None
+
+
 class DataApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -151,19 +175,27 @@ class DataApp:
             delimiter = detect_csv_delimiter(input_path)
             self._log(f"Detected delimiter: {repr(delimiter)}")
             
+            # NSRDB auto-detection: if user left skip_rows = 0, try to find the real header
+            auto_skip = skip_rows
+            if skip_rows == 0:
+                header_idx = detect_nsrdb_header_row(input_path)
+                if header_idx is not None and header_idx >= 1:
+                    auto_skip = header_idx
+                    self._log(f"NSRDB format detected; auto-setting skip_rows={auto_skip}")
+            
             # Try different encodings
             df = None
             encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
             for enc in encodings:
                 try:
-                    self._log(f"Trying encoding: {enc} with skiprows={skip_rows}")
+                    self._log(f"Trying encoding: {enc} with skiprows={auto_skip}")
                     df = pd.read_csv(
                         input_path, 
                         delimiter=delimiter,
                         encoding=enc,
                         on_bad_lines='skip',  # Skip problematic rows
                         engine='python',      # More robust parser
-                        skiprows=skip_rows    # Skip metadata header rows
+                        skiprows=auto_skip    # Skip metadata header rows (auto-detected for NSRDB)
                     )
                     self._log(f"✓ Successfully read with encoding: {enc}")
                     break

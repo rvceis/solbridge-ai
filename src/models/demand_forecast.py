@@ -184,6 +184,28 @@ class DemandXGBoostModel:
         except Exception as e:
             logger.error(f"Prediction failed: {str(e)}")
             raise PredictionError(str(e), model_name="DemandXGBoostModel")
+    
+    def save(self, filepath: str):
+        """Save model"""
+        if self.model is None:
+            raise ValueError("Model not trained")
+        
+        try:
+            self.model.save_model(filepath)
+            logger.info(f"XGBoost demand model saved to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to save model: {str(e)}")
+            raise
+    
+    def load(self, filepath: str):
+        """Load model"""
+        try:
+            self.model = self.xgb.XGBRegressor()
+            self.model.load_model(filepath)
+            logger.info(f"XGBoost demand model loaded from {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to load model: {str(e)}")
+            raise ModelLoadError("DemandXGBoostModel", str(e))
 
 
 class DemandForecastingEnsemble:
