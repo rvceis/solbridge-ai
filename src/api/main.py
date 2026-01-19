@@ -32,6 +32,7 @@ from src.models.advanced_models import (
 )
 from src.services.matching_service import MarketplaceMatchingService, UserProfile, MatchingResult
 from src.services.training_pipeline import ModelTrainingPipeline
+from src.routes.matching_routes import router as matching_router
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -318,6 +319,9 @@ def get_model_manager() -> ModelManager:
 # ============================================================================
 
 app = create_app()
+
+# Register investment matching routes
+app.include_router(matching_router)
 
 
 @app.get("/health", response_model=HealthResponse)
