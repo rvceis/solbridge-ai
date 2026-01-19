@@ -50,31 +50,37 @@ class MLServiceRunner:
         logger.info("LOADING ML MODELS")
         logger.info("=" * 80)
         
+        models_dir = PROJECT_ROOT / "models"
+        
         try:
             from src.models.solar_forecast import SolarXGBoostModel
             logger.info("Loading Solar XGBoost Model...")
             solar_model = SolarXGBoostModel()
-            if solar_model.load():
+            solar_model_path = models_dir / "solar_xgboost_model.pkl"
+            if solar_model_path.exists():
+                solar_model.load(str(solar_model_path))
                 logger.info("✓ Solar XGBoost Model loaded successfully")
             else:
-                logger.warning("⚠ Solar XGBoost Model not found - will use default")
+                logger.warning(f"⚠ Solar XGBoost Model not found at {solar_model_path} - will use default")
                 
         except Exception as e:
             logger.error(f"✗ Error loading Solar XGBoost Model: {e}", exc_info=True)
-            raise
+            # Don't raise - allow service to start with default models
             
         try:
             from src.models.demand_forecast import DemandXGBoostModel
             logger.info("Loading Demand XGBoost Model...")
             demand_model = DemandXGBoostModel()
-            if demand_model.load():
+            demand_model_path = models_dir / "demand_xgboost_model.pkl"
+            if demand_model_path.exists():
+                demand_model.load(str(demand_model_path))
                 logger.info("✓ Demand XGBoost Model loaded successfully")
             else:
-                logger.warning("⚠ Demand XGBoost Model not found - will use default")
+                logger.warning(f"⚠ Demand XGBoost Model not found at {demand_model_path} - will use default")
                 
         except Exception as e:
             logger.error(f"✗ Error loading Demand XGBoost Model: {e}", exc_info=True)
-            raise
+            # Don't raise - allow service to start with default models
             
         logger.info("=" * 80)
         
