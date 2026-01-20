@@ -55,7 +55,7 @@ class SolarGenerationData(BaseModel):
     system_capacity_kw: float
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "device_id": "SM_H123_001",
                 "timestamp": "2024-01-17T14:00:00Z",
@@ -110,6 +110,8 @@ class SolarForecastResponse(BaseModel):
     confidence_score: float
     model_version: str
     generated_at: datetime
+    
+    model_config = {"protected_namespaces": ()}
 
 
 class DemandForecastRequest(BaseModel):
@@ -127,6 +129,8 @@ class DemandForecastResponse(BaseModel):
     predictions: List[Dict[str, Any]]
     model_version: str
     generated_at: datetime
+    
+    model_config = {"protected_namespaces": ()}
 
 
 class PricingRequest(BaseModel):
@@ -322,6 +326,18 @@ app = create_app()
 
 # Register investment matching routes
 app.include_router(matching_router)
+
+
+@app.get("/")
+async def root():
+    """Root endpoint - redirect to docs"""
+    return {
+        "service": settings.SERVICE_NAME,
+        "version": settings.SERVICE_VERSION,
+        "status": "running",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 
 @app.get("/health", response_model=HealthResponse)
