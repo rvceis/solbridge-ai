@@ -329,6 +329,7 @@ app.include_router(matching_router)
 
 
 @app.get("/")
+@app.head("/")
 async def root():
     """Root endpoint - redirect to docs"""
     return {
@@ -717,9 +718,20 @@ async def startup_event():
     try:
         # Get model manager instance
         model_manager = get_model_manager()
-        logger.info("Loading pretrained models from disk...")
         
         model_dir = Path(settings.MODEL_DIR)
+        model_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize models if missing
+        logger.info("Checking for pretrained models and initializing if needed...")
+        try:
+            from src.utils.model_initializer import initialize_models_if_missing
+            init_results = initialize_models_if_missing(model_dir)
+            logger.info(f"Model initialization complete: {init_results}")
+        except Exception as e:
+            logger.warning(f"Could not auto-initialize models: {e}")
+        
+        logger.info("Loading models from disk...")
         models_loaded = 0
         
         # Try to load Solar XGBoost
