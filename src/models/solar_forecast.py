@@ -322,8 +322,7 @@ class SolarXGBoostModel:
             
             self.model.fit(
                 X_train, y_train,
-                eval_set=eval_set,
-                early_stopping_rounds=20 if eval_set else None,
+                eval_set=eval_set if eval_set else None,
                 verbose=False
             )
             

@@ -326,8 +326,8 @@ class ModelTrainingPipeline:
         
         # Train each model
         results["models"]["solar_lstm"] = self.train_solar_lstm_model(model_manager.solar_lstm)
-        results["models"]["solar_xgboost"] = self.train_solar_lstm_model(model_manager.solar_xgboost)
-        results["models"]["demand_lstm"] = self.train_solar_lstm_model(model_manager.demand_lstm)
+        results["models"]["solar_xgboost"] = self.train_solar_xgboost_model(model_manager.solar_xgboost)
+        results["models"]["demand_lstm"] = self.train_demand_lstm_model(model_manager.demand_lstm)
         results["models"]["demand_xgboost"] = self.train_demand_xgboost_model(model_manager.demand_xgboost)
         results["models"]["pricing"] = self.train_pricing_model(model_manager.pricing_model)
         results["models"]["risk"] = self.train_risk_model(model_manager.risk_model)
