@@ -374,11 +374,14 @@ async def forecast_solar(
         )
         
         # Make predictions
-        if model_manager.solar_lstm.model:
-            X = processed_data.iloc[-request.panel_capacity_kw:].values.reshape(1, -1, -1)
-            lstm_pred, confidence = model_manager.solar_lstm.predict(X)
-        else:
-            lstm_pred = None
+        lstm_pred = None
+        confidence = None
+        if model_manager.solar_lstm.model is not None:
+            # Use a fixed integer lookback window compatible with the LSTM
+            lookback_hours = min(len(processed_data), 168)
+            if lookback_hours > 0:
+                X = processed_data.iloc[-lookback_hours:].values.reshape(1, lookback_hours, -1)
+                lstm_pred, confidence = model_manager.solar_lstm.predict(X)
         
         # Format response
         predictions = []
@@ -408,6 +411,74 @@ async def forecast_solar(
         logger.error(f"Solar forecast failed: {str(e)}")
         error = handle_exception(e, context={"host_id": request.host_id})
         raise HTTPException(status_code=error["status_code"], detail=error)
+
+
+# Compatibility alias: support GET with query params used by some clients
+@app.get("/api/v1/ai/forecast/solar")
+@app.get("/ai/forecast/solar")
+async def forecast_solar_get(
+    hours: int = 24,
+    panel_capacity_kw: float = 5.0,
+    host_id: Optional[str] = "default"
+):
+    """Simple solar forecast via GET with query params.
+    Uses XGBoost if available; otherwise returns zero baseline.
+    """
+    try:
+        logger.info(f"[GET] Solar forecast request host={host_id} hours={hours} capacity={panel_capacity_kw}")
+        start_time = datetime.utcnow()
+
+        # Build simple feature dataframe for XGBoost
+        rows = []
+        now = datetime.utcnow()
+        for i in range(hours):
+            t = now + timedelta(hours=i)
+            rows.append({
+                "temperature": 30.0,
+                "humidity": 50.0,
+                "cloud_cover": 50.0,
+                "hour": t.hour,
+                "day_of_week": t.weekday(),
+                "month": t.month
+            })
+        X = pd.DataFrame(rows)
+
+        # Try XGBoost prediction
+        pred_values = np.zeros(hours)
+        try:
+            manager = get_model_manager()
+            if manager.solar_xgboost.model is not None:
+                xgb_pred = manager.solar_xgboost.predict(X)
+                pred_values = xgb_pred
+        except Exception as e:
+            logger.warning(f"XGBoost prediction not available: {e}")
+
+        predictions = []
+        for i in range(hours):
+            pred_time = start_time + timedelta(hours=i)
+            val = float(max(0.0, pred_values[i] if i < len(pred_values) else 0.0))
+            predictions.append({
+                "hour": pred_time.isoformat(),
+                "predicted_kwh": val,
+                "confidence_lower": float(max(0, val * 0.8)),
+                "confidence_upper": float(val * 1.2)
+            })
+
+        return {
+            "host_id": host_id,
+            "forecast_start": start_time,
+            "predictions": predictions,
+            "confidence_score": 0.75,
+            "model_version": "1.0.0",
+            "generated_at": datetime.utcnow()
+        }
+    except Exception as e:
+        logger.error(f"Solar GET forecast failed: {e}")
+        raise HTTPException(status_code=500, detail={
+            "error": "ForecastError",
+            "message": str(e),
+            "success": False
+        })
 
 
 @app.post("/api/v1/forecast/demand", response_model=DemandForecastResponse)
@@ -783,6 +854,80 @@ async def startup_event():
             logger.info(f"ℹ️  demand_lstm model not found at {demand_lstm_path}")
         
         # Report final status
+        # If advanced models are uninitialized, train simple baselines with synthetic data
+        try:
+            # DynamicPricingModel baseline
+            if model_manager.pricing_model.model is None:
+                logger.info("Training baseline DynamicPricingModel...")
+                hours = np.arange(24)
+                demand = 3 + 2 * np.sin((hours - 18) * np.pi / 12) + np.random.normal(0, 0.2, 24)
+                supply = 4 + 1.5 * np.sin((hours - 12) * np.pi / 12) + np.random.normal(0, 0.2, 24)
+                X_pricing = pd.DataFrame({
+                    "hour": hours,
+                    "demand": demand,
+                    "supply": supply,
+                    "day_of_week": datetime.utcnow().weekday(),
+                    "month": datetime.utcnow().month
+                })
+                # Synthetic target price: base 6 + premium when demand>supply
+                y_price = 6 + np.clip(demand / (supply + 0.1), 0.5, 1.8)
+                model_manager.pricing_model.train(X_pricing, pd.Series(y_price))
+                logger.info("✓ Baseline DynamicPricingModel trained")
+        except Exception as e:
+            logger.warning(f"Pricing baseline training skipped: {e}")
+
+        try:
+            # InvestorRiskScoringModel baseline
+            if model_manager.risk_model.model is None:
+                logger.info("Training baseline InvestorRiskScoringModel...")
+                n = 500
+                X_risk = pd.DataFrame({
+                    "capacity_kw": np.random.uniform(3, 20, n),
+                    "credit_score": np.random.uniform(600, 800, n),
+                    "roi_estimate": np.random.uniform(0.08, 0.25, n),
+                    "city_index": np.random.randint(0, 20, n)
+                })
+                # Label: higher credit and roi => lower risk
+                score = 0.6 * (800 - X_risk["credit_score"]) / 200 + 0.4 * (0.2 - X_risk["roi_estimate"]) / 0.2
+                y_risk = pd.cut(score, bins=[-np.inf, 0.2, 0.6, np.inf], labels=[0, 1, 2]).astype(int)
+                model_manager.risk_model.train(X_risk, pd.Series(y_risk))
+                logger.info("✓ Baseline InvestorRiskScoringModel trained")
+        except Exception as e:
+            logger.warning(f"Risk baseline training skipped: {e}")
+
+        try:
+            # AnomalyDetectionModel baseline
+            if model_manager.anomaly_model.model is None:
+                logger.info("Training baseline AnomalyDetectionModel...")
+                n = 1000
+                X_anom = pd.DataFrame({
+                    "voltage": np.random.normal(230, 5, n),
+                    "current": np.random.normal(10, 2, n),
+                    "temperature": np.random.normal(30, 3, n)
+                })
+                model_manager.anomaly_model.train(X_anom, contamination=0.05)
+                logger.info("✓ Baseline AnomalyDetectionModel trained")
+        except Exception as e:
+            logger.warning(f"Anomaly baseline training skipped: {e}")
+
+        try:
+            # EquipmentFailurePredictorModel baseline
+            if model_manager.failure_model.model is None:
+                logger.info("Training baseline EquipmentFailurePredictorModel...")
+                n = 800
+                X_fail = pd.DataFrame({
+                    "vibration": np.random.normal(0.5, 0.2, n),
+                    "temperature": np.random.normal(35, 4, n),
+                    "age_months": np.random.uniform(1, 60, n)
+                })
+                # Probability increases with vibration, high temp, age
+                risk_raw = 0.4 * X_fail["vibration"] + 0.3 * (X_fail["temperature"] - 30) / 15 + 0.3 * (X_fail["age_months"] / 60)
+                y_fail = (risk_raw > 0.7).astype(int)
+                model_manager.failure_model.train(X_fail, pd.Series(y_fail))
+                logger.info("✓ Baseline EquipmentFailurePredictorModel trained")
+        except Exception as e:
+            logger.warning(f"Failure baseline training skipped: {e}")
+
         final_status = model_manager.get_models_status()
         logger.info(f"Model loading complete: {models_loaded} models loaded")
         logger.info(f"Models status: {final_status}")
