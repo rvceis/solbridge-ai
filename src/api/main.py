@@ -23,6 +23,7 @@ from src.utils.logger import get_logger
 from src.utils.exceptions import handle_exception, MLServiceException
 from src.preprocessing.pipeline import DataPreprocessingPipeline
 from src.models.solar_forecast import SolarLSTMModel, SolarXGBoostModel, SolarForecastingEnsemble
+from src.models.solar_prophet import SolarProphetModel
 from src.models.demand_forecast import DemandLSTMModel, DemandXGBoostModel, DemandForecastingEnsemble
 from src.models.advanced_models import (
     DynamicPricingModel,
@@ -32,6 +33,7 @@ from src.models.advanced_models import (
 )
 from src.services.matching_service import MarketplaceMatchingService, UserProfile, MatchingResult
 from src.services.training_pipeline import ModelTrainingPipeline
+from src.services.weather_service import get_weather_service
 from src.routes.matching_routes import router as matching_router
 
 logger = get_logger(__name__)
@@ -359,29 +361,56 @@ async def forecast_solar(
     request: SolarForecastRequest,
     model_manager: ModelManager = Depends(get_model_manager)
 ):
-    """Forecast solar generation"""
+    """
+    Forecast solar generation using Prophet + real weather data
+    Uses pre-trained Facebook Prophet model for better accuracy
+    """
     try:
         logger.info(f"Solar forecast request for host {request.host_id}")
         
-        # Prepare data
-        historical_df = pd.DataFrame([d.dict() for d in request.historical_data])
-        weather_df = pd.DataFrame([w.dict() for w in request.weather_forecast])
+        # Initialize weather service
+        weather_service = get_weather_service()
         
-        # Preprocess
-        processed_data = model_manager.preprocessor.preprocess_solar_data(
-            historical_df,
-            system_capacity_kw=request.panel_capacity_kw
-        )
+        # Get real weather data if location provided
+        weather_data = None
+        if hasattr(request, 'location_latitude') and hasattr(request, 'location_longitude'):
+            try:
+                weather_json = weather_service.get_weather_forecast(
+                    request.location_latitude,
+                    request.location_longitude,
+                    hours=request.forecast_hours
+                )
+                weather_data = weather_service.parse_forecast_to_dataframe(weather_json)
+                weather_data = weather_service.enrich_with_solar_potential(
+                    weather_data,
+                    request.location_latitude,
+                    request.location_longitude
+                )
+                logger.info(f"✓ Using real weather data for forecast")
+            except Exception as e:
+                logger.warning(f"Could not fetch weather data: {e}, using default")
+        
+        # Use Prophet model for forecasting
+        prophet_model = SolarProphetModel()
+        
+        # Train on historical data if provided, else use default patterns
+        if request.historical_data and len(request.historical_data) > 0:
+            historical_df = pd.DataFrame([
+                {
+                    "timestamp": d.timestamp,
+                    "power_kw": d.power_kw
+                }
+                for d in request.historical_data
+            ])
+            prophet_model.train_or_load(historical_df)
+        else:
+            prophet_model.train_or_load()  # Uses default seasonal patterns
         
         # Make predictions
-        lstm_pred = None
-        confidence = None
-        if model_manager.solar_lstm.model is not None:
-            # Use a fixed integer lookback window compatible with the LSTM
-            lookback_hours = min(len(processed_data), 168)
-            if lookback_hours > 0:
-                X = processed_data.iloc[-lookback_hours:].values.reshape(1, lookback_hours, -1)
-                lstm_pred, confidence = model_manager.solar_lstm.predict(X)
+        predictions_array, forecast_details = prophet_model.predict(
+            hours_ahead=request.forecast_hours,
+            weather_data=weather_data
+        )
         
         # Format response
         predictions = []
@@ -389,21 +418,24 @@ async def forecast_solar(
         
         for i in range(request.forecast_hours):
             pred_time = start_time + timedelta(hours=i)
-            pred_value = lstm_pred[0][i] if lstm_pred is not None else 0
+            pred_value = float(max(0, predictions_array[i]))
+            
+            # Cap at system capacity
+            pred_value = min(pred_value, request.panel_capacity_kw)
             
             predictions.append({
                 "hour": pred_time.isoformat(),
-                "predicted_kwh": float(pred_value),
-                "confidence_lower": float(max(0, pred_value * 0.8)),
-                "confidence_upper": float(pred_value * 1.2)
+                "predicted_kwh": pred_value,
+                "confidence_lower": float(max(0, pred_value * 0.85)),
+                "confidence_upper": float(pred_value * 1.15)
             })
         
         return SolarForecastResponse(
             host_id=request.host_id,
             forecast_start=start_time,
             predictions=predictions,
-            confidence_score=0.92,
-            model_version="1.0.0",
+            confidence_score=0.90,
+            model_version="Prophet-1.1.5",
             generated_at=datetime.utcnow()
         )
         
