@@ -23,6 +23,10 @@ from src.utils.logger import get_logger
 from src.utils.exceptions import handle_exception, MLServiceException
 from src.preprocessing.pipeline import DataPreprocessingPipeline
 from src.models.solar_forecast import SolarLSTMModel, SolarXGBoostModel, SolarForecastingEnsemble
+
+# Initialize logger early so optional imports can log
+logger = get_logger(__name__)
+
 # Optional: Prophet model (requires compilation, may not work on free tier)
 try:
     from src.models.solar_prophet import SolarProphetModel
@@ -42,7 +46,6 @@ from src.services.training_pipeline import ModelTrainingPipeline
 from src.services.weather_service import get_weather_service
 from src.routes.matching_routes import router as matching_router
 
-logger = get_logger(__name__)
 settings = get_settings()
 
 
