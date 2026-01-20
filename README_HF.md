@@ -2,7 +2,7 @@
 title: SolBridge AI - ML Service
 emoji: ☀️
 colorFrom: yellow
-colorTo: orange
+colorTo: purple
 sdk: docker
 pinned: false
 license: mit
