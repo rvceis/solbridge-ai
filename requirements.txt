@@ -17,9 +17,9 @@ scikit-learn==1.3.2
 ## Machine Learning (Core only - reduced for Render free tier)
 xgboost==2.0.1
 joblib==1.3.2
-prophet==1.1.5
-pystan==3.7.0
-cmdstanpy==1.2.0
+# prophet==1.1.5  # Commented out - requires C compiler not available on free tier
+# pystan==3.7.0
+# cmdstanpy==1.2.0
 
 ## Optional ML (commented out - uncomment in advanced tier)
 # tensorflow==2.14.0
