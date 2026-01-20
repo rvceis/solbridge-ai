@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+models/
+# Virtual environments
+venv/
+.env
+.venv/
+
+# Data artifacts
+/data/
+/logs/
+# /models/  # Allow trained models in git (XGBoost, etc.)
+*.csv
+*.parquet
+
+# OS / editors
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Byte-compiled
+*.egg-info/
+.eggs/
+
+# Notebooks
+*.ipynb_checkpoints/

@@ -1,0 +1,26 @@
+services:
+  # ML Service
+  - type: web
+    name: solar-ml-service
+    env: python
+    pythonVersion: 3.11
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: ml-service
+    buildCommand: pip install --no-cache-dir --prefer-binary -r requirements-render.txt
+    startCommand: python3 run.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ML_HOST
+        value: 0.0.0.0
+      - key: ML_PORT
+        value: 8001
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PIP_ONLY_BINARY
+        value: ":all:"
+    healthCheckPath: /health
